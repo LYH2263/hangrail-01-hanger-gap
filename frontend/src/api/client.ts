@@ -5,7 +5,12 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   });
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(text || res.statusText);
+    let detail = text;
+    try {
+      const parsed = JSON.parse(text);
+      if (parsed && typeof parsed.detail === "string") detail = parsed.detail;
+    } catch { /* 非 JSON 错误体，原样展示 */ }
+    throw new Error(detail || res.statusText);
   }
   if (res.status === 204) return undefined as T;
   return res.json();

@@ -253,6 +253,13 @@ button {
 .mono { font-family: "IBM Plex Mono", monospace; }
 .err { color: #ff9b7a; } .ok { color: #d4c08a; }
 
+.buffer-input { width: 6rem; padding: .35rem .5rem; }
+.muted-tip { color: var(--hang-muted); font-size: .8rem; margin-top: .75rem; }
+.buffer-badge {
+  margin-left: .5rem; padding: .1rem .45rem; font-size: .7rem;
+  border: 1px dashed var(--hang-copper); border-radius: 3px; color: var(--hang-copper);
+}
+
 .ruler-wrap {
   background: transparent;
   border: none;

@@ -34,12 +34,27 @@ def free_gaps(rail_length: float, occupied: list[Segment]) -> list[Segment]:
     return gaps
 
 
-def first_fit(rail_length: float, occupied: list[Segment], garment_cm: float) -> Placement | None:
+def first_fit(
+    rail_length: float,
+    occupied: list[Segment],
+    garment_cm: float,
+    buffer_cm: float = 0.0,
+) -> Placement | None:
+    """First-Fit with inter-garment buffer.
+
+    buffer_cm is the minimum clearance required between the new garment and
+    any adjacent occupied segment. Rail ends carry no buffer: a garment may
+    still start at 0 or end exactly at rail_length. buffer_cm=0 reproduces
+    the legacy edge-to-edge behaviour.
+    """
     if garment_cm <= 0 or garment_cm > rail_length:
         return None
+    buffer_cm = max(0.0, buffer_cm)
     for gap in free_gaps(rail_length, occupied):
-        if gap.length + 1e-9 >= garment_cm:
-            return Placement(gap.start_cm, gap.start_cm + garment_cm)
+        start = gap.start_cm + buffer_cm if gap.start_cm > 0 else gap.start_cm
+        end = gap.end_cm - buffer_cm if gap.end_cm < rail_length else gap.end_cm
+        if end - start + 1e-9 >= garment_cm:
+            return Placement(start, start + garment_cm)
     return None
 
 

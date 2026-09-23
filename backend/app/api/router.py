@@ -12,6 +12,7 @@ from app.schemas.schemas import (
     OccupancySeg,
     OrderOut,
     PickupRequest,
+    RailBufferUpdate,
     RailOut,
     StoreOut,
 )
@@ -33,6 +34,17 @@ def stores(db: Session = Depends(get_db)):
 @api_router.get("/rails", response_model=list[RailOut])
 def rails(db: Session = Depends(get_db)):
     return db.scalars(select(HangRail).order_by(HangRail.id)).all()
+
+
+@api_router.patch("/rails/{rail_id}/buffer", response_model=RailOut)
+def set_rail_buffer(rail_id: int, body: RailBufferUpdate, db: Session = Depends(get_db)):
+    rail = db.get(HangRail, rail_id)
+    if not rail:
+        raise HTTPException(404, "挂杆不存在")
+    rail.buffer_cm = body.buffer_cm
+    db.commit()
+    db.refresh(rail)
+    return rail
 
 
 @api_router.get("/orders", response_model=list[OrderOut])
@@ -63,7 +75,13 @@ def occupancy(rail_id: int, db: Session = Depends(get_db)):
             )
         )
     segs.sort(key=lambda s: s.start_cm)
-    return OccupancyOut(rail_id=rail.id, label=rail.label, length_cm=rail.length_cm, segments=segs)
+    return OccupancyOut(
+        rail_id=rail.id,
+        label=rail.label,
+        length_cm=rail.length_cm,
+        buffer_cm=rail.buffer_cm or 0,
+        segments=segs,
+    )
 
 
 @api_router.post("/hang", response_model=OrderOut)
@@ -80,13 +98,18 @@ def hang(body: HangRequest, db: Session = Depends(get_db)):
     if not rails:
         raise HTTPException(404, "无可用挂杆")
 
+    buffer_blocked = False
     for rail in rails:
         active = db.scalars(
             select(RailPlacement).where(RailPlacement.rail_id == rail.id, RailPlacement.active == 1)
         ).all()
         occupied = [Segment(p.start_cm, p.end_cm) for p in active]
-        place = first_fit(rail.length_cm, occupied, order.length_cm)
+        buffer_cm = rail.buffer_cm or 0.0
+        place = first_fit(rail.length_cm, occupied, order.length_cm, buffer_cm)
         if place is None:
+            # 区分“完全无空位”与“无缓冲本可贴边挂下、被缓冲占用挤掉”
+            if buffer_cm > 0 and first_fit(rail.length_cm, occupied, order.length_cm, 0) is not None:
+                buffer_blocked = True
             continue
         db.add(
             RailPlacement(
@@ -102,6 +125,8 @@ def hang(body: HangRequest, db: Session = Depends(get_db)):
         db.refresh(order)
         return order
 
+    if buffer_blocked:
+        raise HTTPException(409, "因衣物间隔缓冲导致挂杆空间不足")
     raise HTTPException(409, "挂杆空间不足")
 
 
