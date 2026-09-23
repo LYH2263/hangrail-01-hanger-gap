@@ -13,9 +13,10 @@ from app.schemas.schemas import (
     OrderOut,
     PickupRequest,
     RailOut,
+    RailUpdate,
     StoreOut,
 )
-from app.services.rail_engine import Segment, first_fit
+from app.services.rail_engine import FitResult, Segment, fit
 
 api_router = APIRouter()
 
@@ -33,6 +34,19 @@ def stores(db: Session = Depends(get_db)):
 @api_router.get("/rails", response_model=list[RailOut])
 def rails(db: Session = Depends(get_db)):
     return db.scalars(select(HangRail).order_by(HangRail.id)).all()
+
+
+@api_router.patch("/rails/{rail_id}", response_model=RailOut)
+def update_rail(rail_id: int, body: RailUpdate, db: Session = Depends(get_db)):
+    rail = db.get(HangRail, rail_id)
+    if not rail:
+        raise HTTPException(404, "挂杆不存在")
+    if body.buffer_cm > rail.length_cm:
+        raise HTTPException(400, "缓冲不得大于挂杆长度")
+    rail.buffer_cm = body.buffer_cm
+    db.commit()
+    db.refresh(rail)
+    return rail
 
 
 @api_router.get("/orders", response_model=list[OrderOut])
@@ -63,7 +77,13 @@ def occupancy(rail_id: int, db: Session = Depends(get_db)):
             )
         )
     segs.sort(key=lambda s: s.start_cm)
-    return OccupancyOut(rail_id=rail.id, label=rail.label, length_cm=rail.length_cm, segments=segs)
+    return OccupancyOut(
+        rail_id=rail.id,
+        label=rail.label,
+        length_cm=rail.length_cm,
+        buffer_cm=rail.buffer_cm or 0.0,
+        segments=segs,
+    )
 
 
 @api_router.post("/hang", response_model=OrderOut)
@@ -80,20 +100,23 @@ def hang(body: HangRequest, db: Session = Depends(get_db)):
     if not rails:
         raise HTTPException(404, "无可用挂杆")
 
+    buffer_blocked: list[float] = []
     for rail in rails:
         active = db.scalars(
             select(RailPlacement).where(RailPlacement.rail_id == rail.id, RailPlacement.active == 1)
         ).all()
         occupied = [Segment(p.start_cm, p.end_cm) for p in active]
-        place = first_fit(rail.length_cm, occupied, order.length_cm)
-        if place is None:
+        decision = fit(rail.length_cm, occupied, order.length_cm, rail.buffer_cm or 0.0)
+        if decision.result is not FitResult.OK or decision.placement is None:
+            if decision.result is FitResult.BUFFER_BLOCKED:
+                buffer_blocked.append(rail.buffer_cm or 0.0)
             continue
         db.add(
             RailPlacement(
                 rail_id=rail.id,
                 order_id=order.id,
-                start_cm=place.start_cm,
-                end_cm=place.end_cm,
+                start_cm=decision.placement.start_cm,
+                end_cm=decision.placement.end_cm,
             )
         )
         order.status = "hung"
@@ -102,6 +125,12 @@ def hang(body: HangRequest, db: Session = Depends(get_db)):
         db.refresh(order)
         return order
 
+    if buffer_blocked:
+        gap = min(buffer_blocked)
+        raise HTTPException(
+            409,
+            f"挂杆空间不足：相邻衣物之间需留 {gap:g} cm 缓冲，现有贴边空隙均无法满足间隔要求",
+        )
     raise HTTPException(409, "挂杆空间不足")
 
 

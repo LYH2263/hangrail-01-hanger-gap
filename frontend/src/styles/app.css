@@ -277,4 +277,39 @@ button {
   border: 1px solid #a8876a; color: #fff; font-size: 11px;
   display: flex; align-items: center; justify-content: center;
   padding: 0 4px; overflow: hidden; white-space: nowrap;
+  z-index: 2;
+}
+/* 相邻衣物之间的缓冲留白：与衣物色块明显区分的空带 */
+.seg-gap {
+  position: absolute; top: 6px; bottom: 6px;
+  background: repeating-linear-gradient(
+    45deg, rgba(232, 168, 124, .10) 0, rgba(232, 168, 124, .10) 3px,
+    transparent 3px, transparent 6px
+  );
+  border-left: 1px dashed rgba(232, 168, 124, .55);
+  border-right: 1px dashed rgba(232, 168, 124, .55);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 1;
+}
+.seg-gap-mark {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 9px;
+  color: var(--hang-copper);
+  background: rgba(16, 12, 10, .72);
+  padding: 0 3px;
+  border-radius: 2px;
+  white-space: nowrap;
+}
+/* 窄留白（如 5cm/200cm）容不下文字，只画一条居中的间隔线 */
+.seg-gap--tight {
+  background: none;
+  border: none;
+}
+.seg-gap--tight::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  border-left: 1px dashed rgba(232, 168, 124, .7);
 }

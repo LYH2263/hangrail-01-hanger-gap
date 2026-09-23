@@ -1,5 +1,5 @@
 from datetime import datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class StoreOut(BaseModel):
@@ -13,7 +13,12 @@ class RailOut(BaseModel):
     store_id: int
     label: str
     length_cm: float
+    buffer_cm: float
     model_config = {"from_attributes": True}
+
+
+class RailUpdate(BaseModel):
+    buffer_cm: float = Field(ge=0)
 
 
 class OrderOut(BaseModel):
@@ -49,4 +54,5 @@ class OccupancyOut(BaseModel):
     rail_id: int
     label: str
     length_cm: float
+    buffer_cm: float
     segments: list[OccupancySeg]
